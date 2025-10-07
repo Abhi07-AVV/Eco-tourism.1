@@ -7,7 +7,6 @@ import sys
 import json
 import joblib
 import numpy as np
-import pandas as pd
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 
@@ -86,28 +85,32 @@ def preprocess_input_data(data, task_type='regression'):
         if task_type not in encoders or task_type not in scalers or f"{task_type}_features" not in feature_names:
             raise Exception(f"Missing encoders/scalers/features for task '{task_type}'")
 
-        # Convert to DataFrame
-        df = pd.DataFrame([data])
+        # Create a copy of data to avoid modifying original
+        processed_data = data.copy()
 
         # Encode categorical features
         for feat in ['Vegetation_Type', 'Soil_Type', 'Country']:
-            if feat in df.columns and feat in encoders[task_type]:
+            if feat in processed_data and feat in encoders[task_type]:
                 encoder = encoders[task_type][feat]
-                df[feat] = df[feat].apply(
-                    lambda x: encoder.transform([str(x)])[0] if str(x) in encoder.classes_ else 0
-                )
+                value = str(processed_data[feat])
+                if value in encoder.classes_:
+                    processed_data[feat] = encoder.transform([value])[0]
+                else:
+                    processed_data[feat] = 0
 
         # Boolean to int
-        if 'Protected_Area_Status' in df.columns:
-            df['Protected_Area_Status'] = df['Protected_Area_Status'].astype(int)
+        if 'Protected_Area_Status' in processed_data:
+            processed_data['Protected_Area_Status'] = int(processed_data['Protected_Area_Status'])
 
         # Select and scale features
         cols = feature_names[f"{task_type}_features"]
-        missing = [c for c in cols if c not in df.columns]
+        missing = [c for c in cols if c not in processed_data]
         if missing:
             raise Exception(f"Missing input features: {missing}")
-        features = df[cols]
-        return scalers[task_type].transform(features)
+        
+        # Create feature array in correct order
+        feature_array = np.array([[processed_data[col] for col in cols]])
+        return scalers[task_type].transform(feature_array)
 
     except Exception as e:
         raise Exception(f"Error preprocessing data: {e}")
