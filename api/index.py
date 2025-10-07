@@ -204,9 +204,7 @@ if not models:
     load_models_and_processors()
 
 # Vercel serverless function handler
-def handler(request):
-    with app.app_context():
-        return app.full_dispatch_request()
+app = app  # Export the app for Vercel
 
 # For local testing
 if __name__ == '__main__':
