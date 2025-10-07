@@ -1,9 +1,9 @@
 """
-Vercel Serverless Function Entry Point for Eco-Tourism Climate Risk Prediction
+Flask Backend API for Eco-Tourism Climate Risk Prediction
+Optimized for Render.com deployment with models/ directory support
 """
 
 import os
-import sys
 import json
 import joblib
 import numpy as np
@@ -11,15 +11,10 @@ import pandas as pd
 from flask import Flask, request, jsonify, render_template, send_from_directory
 from flask_cors import CORS
 
-# Add the parent directory to the path to access models and templates
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 # Directory where all model and processor files live
-MODEL_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'models')
-TEMPLATE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'templates')
-STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static')
+MODEL_DIR = 'models'
 
-app = Flask(__name__, static_folder=STATIC_DIR, template_folder=TEMPLATE_DIR)
+app = Flask(__name__, static_folder='static', template_folder='templates')
 CORS(app)
 
 # Global storage for loaded models and processors
@@ -34,9 +29,7 @@ def load_models_and_processors():
 
     try:
         print("Starting model loading process...")
-        print(f"MODEL_DIR: {MODEL_DIR}")
-        print(f"Files in MODEL_DIR: {os.listdir(MODEL_DIR) if os.path.exists(MODEL_DIR) else 'Directory not found'}")
-        
+        print(f"CWD: {os.getcwd()}, files: {os.listdir('.')}")
         # List expected files under models/
         expected = [
             'best_regression_model_linear.pkl',
@@ -64,8 +57,7 @@ def load_models_and_processors():
         encoders['classification'] = joblib.load(os.path.join(MODEL_DIR, 'classification_encoders.pkl'))
 
         # Load feature names (JSON in project root)
-        feature_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'feature_names.json')
-        with open(feature_file, 'r') as f:
+        with open('feature_names.json', 'r') as f:
             feature_names = json.load(f)
 
         print("✅ All models and processors loaded successfully!")
@@ -118,14 +110,11 @@ def index():
 
 @app.route('/static/<path:path>')
 def serve_static(path):
-    return send_from_directory(STATIC_DIR, path)
+    return send_from_directory('static', path)
 
 @app.route('/api/predict', methods=['POST'])
 def predict():
     try:
-        if not models:
-            load_models_and_processors()
-            
         if not models:
             return jsonify({'error': 'Models not loaded', 'success': False}), 500
 
@@ -199,13 +188,11 @@ def not_found(e):
 def internal_error(e):
     return jsonify({'error':'Internal server error'}), 500
 
-# Initialize models on first import
-if not models:
-    load_models_and_processors()
-
-# Vercel serverless function handler
-app = app  # Export the app for Vercel
-
-# For local testing
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print("Starting API on Railway...")
+    loaded = load_models_and_processors()
+    if not loaded:
+        print("WARNING: Models/processors failed to load.")
+    port = int(os.environ.get('PORT', 8080))
+    debug = os.environ.get('FLASK_ENV')=='development'
+    app.run(host='0.0.0.0', port=port, debug=debug)
